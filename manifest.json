@@ -1,0 +1,27 @@
+{
+  "name": "حلال فور يو | المينيو الإلكتروني",
+  "short_name": "حلال فور يو",
+  "lang": "ar",
+  "dir": "rtl",
+  "description": "المينيو الإلكتروني لحلال فور يو",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FBF7EF",
+  "theme_color": "#7A1F2B",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
