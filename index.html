@@ -372,7 +372,98 @@
                     console.warn("PWA service worker registration failed:", error);
                 }
             });
+
+            // If a new service worker takes control (e.g. right after an
+            // update is installed), the page it's already controlling is
+            // still running the OLD js/data in memory. Reload once so the
+            // open app actually picks up the new version.
+            let refreshingAfterUpdate = false;
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+                if (refreshingAfterUpdate) return;
+                refreshingAfterUpdate = true;
+                window.location.reload();
+            });
         }
+
+        // ------------------------------------------------------------
+        // LIVE MENU UPDATE CHECK
+        // ------------------------------------------------------------
+        // Why this exists: once a customer installs the menu on their
+        // home screen, reopening it often just RESUMES the already-running
+        // page from memory instead of doing a fresh navigation — on both
+        // iOS and Android. When that happens, the service worker's
+        // network-first strategy never gets a chance to run again, because
+        // no new request is made at all. The only reliable way to notice
+        // "the restaurant changed a price" in that situation is to check
+        // from inside the already-running page itself.
+        //
+        // This fetches the live data/menu.js file (bypassing every cache)
+        // whenever the customer returns to the app, and shows a small
+        // "update available" banner if it changed — rather than reloading
+        // automatically, which could wipe out an order the customer is
+        // mid-way through building.
+        let menuSnapshot = null;
+        let updateBannerShown = false;
+        let checkInFlight = false;
+
+        async function fetchLiveMenuText() {
+            const res = await fetch(`./data/menu.js?_=${Date.now()}`, { cache: "no-store" });
+            if (!res.ok) throw new Error(`menu.js fetch failed: ${res.status}`);
+            return res.text();
+        }
+
+        function showMenuUpdateBanner() {
+            if (updateBannerShown) return;
+            updateBannerShown = true;
+
+            const banner = document.createElement("div");
+            banner.className = "menu-update-banner";
+            banner.setAttribute("role", "status");
+            banner.innerHTML = `
+                <span>في تحديث جديد للمينيو 🎉</span>
+                <button type="button">تحديث الآن</button>
+            `;
+            banner.querySelector("button").addEventListener("click", () => {
+                window.location.reload();
+            });
+            document.body.appendChild(banner);
+        }
+
+        async function checkForMenuUpdate() {
+            if (checkInFlight) return;
+            checkInFlight = true;
+            try {
+                const latest = await fetchLiveMenuText();
+                if (menuSnapshot === null) {
+                    // First run: this is our baseline, not an update.
+                    menuSnapshot = latest;
+                } else if (latest !== menuSnapshot) {
+                    showMenuUpdateBanner();
+                }
+            } catch (error) {
+                // Offline or network hiccup — stay quiet, try again next time.
+            } finally {
+                checkInFlight = false;
+            }
+        }
+
+        // Baseline snapshot as soon as the page is ready.
+        checkForMenuUpdate();
+
+        // The moments that matter most: coming back to an already-open
+        // installed app (this is what "reopening the icon" usually
+        // triggers instead of a real reload).
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") checkForMenuUpdate();
+        });
+        window.addEventListener("focus", checkForMenuUpdate);
+        window.addEventListener("online", checkForMenuUpdate);
+
+        // Belt-and-braces: also re-check periodically while the app is
+        // open and visible, in case the customer just leaves it running.
+        setInterval(() => {
+            if (document.visibilityState === "visible") checkForMenuUpdate();
+        }, 5 * 60 * 1000);
     })();
     </script>
 
