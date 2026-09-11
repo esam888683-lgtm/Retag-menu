@@ -12,11 +12,6 @@
     <meta property="og:description" content="تصفح المينيو، اختار وجبتك، واطلبها في خطوات بسيطة عبر واتساب.">
     <meta property="og:image" content="assets/logo.svg">
     <meta name="theme-color" content="#7A1F2B">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="حلال فور يو">
-    <link rel="manifest" href="manifest.json">
 
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,11 +31,6 @@
                 <h1 class="brand-name" id="brandName">حلال فور يو</h1>
                 <p class="brand-slogan" id="brandSlogan">تاكل وانت مطمن</p>
             </div>
-            <button class="install-btn" id="installBtn" type="button" aria-label="تثبيت التطبيق" hidden>
-                <span aria-hidden="true">⇩</span>
-                <span>تثبيت التطبيق</span>
-            </button>
-
             <button class="info-btn" id="infoBtn" type="button" aria-label="معلومات المطعم" aria-haspopup="dialog">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.8" r="0.5" fill="currentColor" stroke="none"/>
@@ -274,36 +264,5 @@
 
     <script src="data/menu.js"></script>
     <script src="js/app.js"></script>
-<script>
-        // PWA install support
-        let deferredInstallPrompt = null;
-        const installBtn = document.getElementById('installBtn');
-
-        window.addEventListener('beforeinstallprompt', (event) => {
-            event.preventDefault();
-            deferredInstallPrompt = event;
-            if (installBtn) installBtn.hidden = false;
-        });
-
-        installBtn?.addEventListener('click', async () => {
-            if (!deferredInstallPrompt) return;
-            deferredInstallPrompt.prompt();
-            await deferredInstallPrompt.userChoice;
-            deferredInstallPrompt = null;
-            installBtn.hidden = true;
-        });
-
-        window.addEventListener('appinstalled', () => {
-            deferredInstallPrompt = null;
-            if (installBtn) installBtn.hidden = true;
-        });
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-                    .catch((error) => console.error('Service Worker registration failed:', error));
-            });
-        }
-    </script>
 </body>
 </html>
