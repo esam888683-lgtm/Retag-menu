@@ -1150,7 +1150,7 @@ const products = [
         category: "extras",
         name: "باكيت بطاطس",
         description: "باكيت بطاطس فارم فرايز",
-        price: 25,
+        price: 30,
         image: "assets/products/بطاطس.jpg",
         badge: null,
         available: true,
