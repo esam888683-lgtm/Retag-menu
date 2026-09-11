@@ -1,81 +1,104 @@
-/*
- * Halal 4 You PWA Service Worker
- * IMPORTANT: Menu data and app HTML/JS are NETWORK-FIRST.
- * This prevents old prices from staying stuck in the PWA cache.
- */
-const VERSION = "2026-09-10-02";
-const STATIC_CACHE = `halal-static-${VERSION}`;
+/* =========================================================================
+   Service Worker — حلال فور يو
+   استراتيجية التحديث:
+   - الملفات التي تتغير باستمرار (index.html / app.js / menu.js / style.css)
+     تُجلب من الشبكة أولاً (Network First) حتى تظهر الأسعار والأصناف الجديدة
+     فورًا للعميل الذي ثبّت التطبيق على موبايله.
+   - الصور والأيقونات تُخدم من الكاش أولاً (Cache First) للسرعة، وتُحدَّث
+     في الخلفية.
+   - عند عدم توفر الإنترنت يتم الرجوع للنسخة المحفوظة.
+   ========================================================================= */
 
-const STATIC_ASSETS = [
+const VERSION = "v3";
+const CORE_CACHE = `halal4you-core-${VERSION}`;
+const ASSET_CACHE = `halal4you-assets-${VERSION}`;
+
+// ملفات أساسية فقط — أي شيء آخر يُحفظ عند أول استخدام
+const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./css/style.css",
-  "./js/app.js",
-  "./data/menu.js",
   "./manifest.json",
+  "./css/style.css",
+  "./data/menu.js",
+  "./js/app.js",
   "./assets/logo.svg",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png"
+  "./assets/icons/icon-192.png",
+  "./assets/icons/icon-512.png"
 ];
 
-const isCritical = (url) => {
-  const path = new URL(url).pathname;
-  return (
-    path.endsWith("/index.html") ||
-    path.endsWith("/data/menu.js") ||
-    path.endsWith("/js/app.js") ||
-    path.endsWith("/manifest.json")
-  );
-};
+// امتدادات تُعتبر "محتوى متغيّر" -> الشبكة أولاً
+const NETWORK_FIRST = /\.(?:html|js|css|json|webmanifest)$/i;
+// امتدادات تُعتبر "أصول ثابتة" -> الكاش أولاً
+const CACHE_FIRST = /\.(?:png|jpg|jpeg|gif|svg|webp|avif|ico|woff2?|ttf|otf)$/i;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then((cache) => cache.addAll(STATIC_ASSETS))
+    caches
+      .open(CORE_CACHE)
+      .then((cache) =>
+        Promise.allSettled(
+          CORE_ASSETS.map((url) =>
+            cache.add(new Request(url, { cache: "reload" }))
+          )
+        )
+      )
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
         keys
-          .filter((key) => key !== STATIC_CACHE && key.startsWith("halal-static-"))
+          .filter((key) => key !== CORE_CACHE && key !== ASSET_CACHE)
           .map((key) => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
+      );
+      if (self.registration.navigationPreload) {
+        try {
+          await self.registration.navigationPreload.enable();
+        } catch (e) {
+          /* تجاهل */
+        }
+      }
+      await self.clients.claim();
+    })()
   );
 });
 
-async function networkFirst(request) {
+// يسمح للصفحة بطلب تفعيل النسخة الجديدة فورًا
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
+});
+
+async function networkFirst(request, preloadResponse) {
+  const cache = await caches.open(CORE_CACHE);
   try {
-    // no-store makes the critical menu/app files bypass the normal HTTP cache.
-    const networkResponse = await fetch(request, { cache: "no-store" });
-    if (networkResponse && networkResponse.ok) {
-      const cache = await caches.open(STATIC_CACHE);
-      await cache.put(request, networkResponse.clone());
-    }
-    return networkResponse;
+    const preload = preloadResponse ? await preloadResponse : null;
+    const response = preload || (await fetch(request, { cache: "no-store" }));
+    if (response && response.ok) cache.put(request, response.clone());
+    return response;
   } catch (error) {
-    const cached = await caches.match(request);
+    const cached = await cache.match(request);
     if (cached) return cached;
+    if (request.mode === "navigate") {
+      const fallback = await cache.match("./index.html");
+      if (fallback) return fallback;
+    }
     throw error;
   }
 }
 
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(STATIC_CACHE);
+async function cacheFirst(request) {
+  const cache = await caches.open(ASSET_CACHE);
   const cached = await cache.match(request);
-
-  const refresh = fetch(request)
-    .then((response) => {
-      if (response && response.ok) cache.put(request, response.clone());
-      return response;
-    })
-    .catch(() => null);
-
-  return cached || (await refresh) || Response.error();
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response && (response.ok || response.type === "opaque")) {
+    cache.put(request, response.clone());
+  }
+  return response;
 }
 
 self.addEventListener("fetch", (event) => {
@@ -83,21 +106,25 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  const sameOrigin = url.origin === self.location.origin;
 
-  if (isCritical(request.url)) {
+  // التنقل بين الصفحات: الشبكة أولاً دائمًا
+  if (request.mode === "navigate") {
+    event.respondWith(networkFirst(request, event.preloadResponse));
+    return;
+  }
+
+  if (!sameOrigin) return; // اترك الخطوط والموارد الخارجية للمتصفح
+
+  if (NETWORK_FIRST.test(url.pathname)) {
     event.respondWith(networkFirst(request));
     return;
   }
 
-  // Navigation: get the latest index.html whenever online.
-  if (request.mode === "navigate") {
-    event.respondWith(networkFirst(new Request(new URL("./index.html", self.location.href), {
-      method: "GET",
-      cache: "no-store"
-    })));
+  if (CACHE_FIRST.test(url.pathname)) {
+    event.respondWith(cacheFirst(request));
     return;
   }
 
-  event.respondWith(staleWhileRevalidate(request));
+  event.respondWith(networkFirst(request));
 });
