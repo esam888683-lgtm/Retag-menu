@@ -12,6 +12,12 @@
     <meta property="og:description" content="تصفح المينيو، اختار وجبتك، واطلبها في خطوات بسيطة عبر واتساب.">
     <meta property="og:image" content="assets/logo.svg">
     <meta name="theme-color" content="#7A1F2B">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="حلال فور يو">
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
 
     <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,6 +51,8 @@
             <input type="search" id="searchInput" class="search-input" placeholder="ابحث عن وجبتك..." aria-label="ابحث في المينيو">
             <button class="search-clear" id="searchClear" type="button" aria-label="مسح البحث" hidden>&times;</button>
         </div>
+
+        <button class="pwa-install-btn" id="pwaInstallBtn" type="button" hidden>📱 تثبيت المينيو</button>
     </header>
 
     <!-- ============================================================ -->
@@ -261,6 +269,203 @@
 
     <!-- Toast notifications container -->
     <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+
+    <!-- PWA INSTALL HELP -->
+    <div class="pwa-help-overlay" id="pwaHelpOverlay" hidden>
+        <section class="pwa-help-card" role="dialog" aria-modal="true" aria-labelledby="pwaHelpTitle">
+            <button class="pwa-help-close" id="pwaHelpClose" type="button" aria-label="إغلاق">&times;</button>
+            <div class="pwa-help-icon">📱</div>
+            <h2 id="pwaHelpTitle">ثبّت المينيو على موبايلك</h2>
+            <p id="pwaHelpIntro"></p>
+            <ol id="pwaHelpSteps"></ol>
+            <button class="btn btn-primary btn-block" id="pwaHelpOk" type="button">تمام</button>
+        </section>
+    </div>
+
+    <script>
+    (() => {
+        let deferredInstallPrompt = null;
+        const installBtn = document.getElementById("pwaInstallBtn");
+        const overlay = document.getElementById("pwaHelpOverlay");
+        const closeBtn = document.getElementById("pwaHelpClose");
+        const okBtn = document.getElementById("pwaHelpOk");
+        const intro = document.getElementById("pwaHelpIntro");
+        const steps = document.getElementById("pwaHelpSteps");
+
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        const isStandalone = window.matchMedia("(display-mode: standalone)").matches ||
+            window.navigator.standalone === true;
+
+        function closeHelp() { overlay.hidden = true; }
+        closeBtn.addEventListener("click", closeHelp);
+        okBtn.addEventListener("click", closeHelp);
+        overlay.addEventListener("click", (e) => { if (e.target === overlay) closeHelp(); });
+
+        function showIOSHelp() {
+            intro.textContent = "لو جهازك iPhone أو iPad، التثبيت يتم من قائمة المشاركة في Safari:";
+            steps.innerHTML = `
+                <li>افتح المينيو من متصفح <strong>Safari</strong>.</li>
+                <li>اضغط زر <strong>المشاركة</strong> ⬆️.</li>
+                <li>اختر <strong>إضافة إلى الشاشة الرئيسية</strong> (Add to Home Screen).</li>
+                <li>اضغط <strong>إضافة</strong> (Add).</li>
+            `;
+            overlay.hidden = false;
+        }
+
+        function showAndroidHelp() {
+            intro.textContent = "ثبّت المينيو على الشاشة الرئيسية للوصول إليه بسرعة كأنه تطبيق.";
+            steps.innerHTML = `
+                <li>اضغط <strong>تثبيت المينيو</strong>.</li>
+                <li>وافق على التثبيت عندما تظهر رسالة المتصفح.</li>
+            `;
+            overlay.hidden = false;
+        }
+
+        if (!isStandalone && installBtn) {
+            if (isIOS) {
+                installBtn.hidden = false;
+                installBtn.textContent = "📱 إضافة المينيو للموبايل";
+                installBtn.addEventListener("click", showIOSHelp);
+            }
+        }
+
+        window.addEventListener("beforeinstallprompt", (event) => {
+            event.preventDefault();
+            deferredInstallPrompt = event;
+            if (!isStandalone && !isIOS && installBtn) {
+                installBtn.hidden = false;
+                installBtn.textContent = "📱 تثبيت المينيو";
+            }
+        });
+
+        if (installBtn) {
+            installBtn.addEventListener("click", async () => {
+                if (isIOS) return; // iOS uses Safari's Add to Home Screen flow.
+                if (!deferredInstallPrompt) {
+                    showAndroidHelp();
+                    return;
+                }
+                deferredInstallPrompt.prompt();
+                await deferredInstallPrompt.userChoice;
+                deferredInstallPrompt = null;
+                installBtn.hidden = true;
+            });
+        }
+
+        window.addEventListener("appinstalled", () => {
+            if (installBtn) installBtn.hidden = true;
+            deferredInstallPrompt = null;
+        });
+
+        // Register/update the service worker without using the browser HTTP cache for the SW script.
+        if ("serviceWorker" in navigator) {
+            window.addEventListener("load", async () => {
+                try {
+                    const registration = await navigator.serviceWorker.register("./service-worker.js", {
+                        scope: "./",
+                        updateViaCache: "none"
+                    });
+                    await registration.update();
+                } catch (error) {
+                    console.warn("PWA service worker registration failed:", error);
+                }
+            });
+
+            // If a new service worker takes control (e.g. right after an
+            // update is installed), the page it's already controlling is
+            // still running the OLD js/data in memory. Reload once so the
+            // open app actually picks up the new version.
+            let refreshingAfterUpdate = false;
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+                if (refreshingAfterUpdate) return;
+                refreshingAfterUpdate = true;
+                window.location.reload();
+            });
+        }
+
+        // ------------------------------------------------------------
+        // LIVE MENU UPDATE CHECK
+        // ------------------------------------------------------------
+        // Why this exists: once a customer installs the menu on their
+        // home screen, reopening it often just RESUMES the already-running
+        // page from memory instead of doing a fresh navigation — on both
+        // iOS and Android. When that happens, the service worker's
+        // network-first strategy never gets a chance to run again, because
+        // no new request is made at all. The only reliable way to notice
+        // "the restaurant changed a price" in that situation is to check
+        // from inside the already-running page itself.
+        //
+        // This fetches the live data/menu.js file (bypassing every cache)
+        // whenever the customer returns to the app, and shows a small
+        // "update available" banner if it changed — rather than reloading
+        // automatically, which could wipe out an order the customer is
+        // mid-way through building.
+        let menuSnapshot = null;
+        let updateBannerShown = false;
+        let checkInFlight = false;
+
+        async function fetchLiveMenuText() {
+            const res = await fetch(`./data/menu.js?_=${Date.now()}`, { cache: "no-store" });
+            if (!res.ok) throw new Error(`menu.js fetch failed: ${res.status}`);
+            return res.text();
+        }
+
+        function showMenuUpdateBanner() {
+            if (updateBannerShown) return;
+            updateBannerShown = true;
+
+            const banner = document.createElement("div");
+            banner.className = "menu-update-banner";
+            banner.setAttribute("role", "status");
+            banner.innerHTML = `
+                <span>في تحديث جديد للمينيو 🎉</span>
+                <button type="button">تحديث الآن</button>
+            `;
+            banner.querySelector("button").addEventListener("click", () => {
+                window.location.reload();
+            });
+            document.body.appendChild(banner);
+        }
+
+        async function checkForMenuUpdate() {
+            if (checkInFlight) return;
+            checkInFlight = true;
+            try {
+                const latest = await fetchLiveMenuText();
+                if (menuSnapshot === null) {
+                    // First run: this is our baseline, not an update.
+                    menuSnapshot = latest;
+                } else if (latest !== menuSnapshot) {
+                    showMenuUpdateBanner();
+                }
+            } catch (error) {
+                // Offline or network hiccup — stay quiet, try again next time.
+            } finally {
+                checkInFlight = false;
+            }
+        }
+
+        // Baseline snapshot as soon as the page is ready.
+        checkForMenuUpdate();
+
+        // The moments that matter most: coming back to an already-open
+        // installed app (this is what "reopening the icon" usually
+        // triggers instead of a real reload).
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") checkForMenuUpdate();
+        });
+        window.addEventListener("focus", checkForMenuUpdate);
+        window.addEventListener("online", checkForMenuUpdate);
+
+        // Belt-and-braces: also re-check periodically while the app is
+        // open and visible, in case the customer just leaves it running.
+        setInterval(() => {
+            if (document.visibilityState === "visible") checkForMenuUpdate();
+        }, 5 * 60 * 1000);
+    })();
+    </script>
 
     <script src="data/menu.js"></script>
     <script src="js/app.js"></script>

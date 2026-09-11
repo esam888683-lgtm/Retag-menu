@@ -957,3 +957,95 @@ textarea:focus-visible {
 @media (min-width: 900px) and (min-height: 700px) {
     .bottom-sheet { top: 6vh; max-height: 88vh; bottom: auto; }
 }
+
+/* ---------------------------------------------------------------
+   PWA INSTALL BUTTON + iOS HELP
+   --------------------------------------------------------------- */
+.pwa-install-btn {
+    width: 100%;
+    margin-top: 10px;
+    border: 0;
+    border-radius: 12px;
+    padding: 11px 14px;
+    background: var(--ink, #171717);
+    color: #fff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.pwa-install-btn[hidden] { display: none !important; }
+
+.pwa-help-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: end center;
+    padding: 16px;
+    background: rgba(0,0,0,.55);
+}
+
+.pwa-help-overlay[hidden] { display: none !important; }
+
+.pwa-help-card {
+    position: relative;
+    width: min(520px, 100%);
+    padding: 24px 20px 20px;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: 0 18px 60px rgba(0,0,0,.28);
+    text-align: center;
+}
+
+.pwa-help-icon { font-size: 42px; margin-bottom: 4px; }
+.pwa-help-card h2 { margin: 0 0 8px; font-size: 22px; }
+.pwa-help-card p { margin: 0 0 14px; color: #555; line-height: 1.7; }
+.pwa-help-card ol { margin: 0 0 18px; padding-right: 24px; text-align: right; line-height: 2; color: #222; }
+.pwa-help-close { position: absolute; top: 10px; left: 12px; width: 34px; height: 34px; border: 0; background: transparent; font-size: 28px; cursor: pointer; color: #555; }
+
+@media (min-width: 640px) {
+    .pwa-install-btn { width: auto; margin-right: auto; margin-left: auto; display: block; }
+}
+
+/* ---------------------------------------------------------------
+   MENU UPDATE BANNER
+   Shown when a customer has the menu open/installed and the
+   restaurant has changed prices or products since it was loaded.
+   --------------------------------------------------------------- */
+.menu-update-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 16px calc(10px + env(safe-area-inset-top));
+    background: var(--primary, #7A1F2B);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    animation: menu-update-banner-in 0.25s ease;
+}
+
+@keyframes menu-update-banner-in {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(0); }
+}
+
+.menu-update-banner button {
+    background: var(--gold, #C89B3C);
+    color: var(--ink, #1B1512);
+    border: none;
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-weight: 800;
+    font-size: 13.5px;
+    cursor: pointer;
+}
+.menu-update-banner button:hover { filter: brightness(1.05); }
